@@ -4,7 +4,8 @@ from typing import Literal
 
 class ProjectRegisterRequest(BaseModel):
     persona: Literal["SDE", "PM"]
-    github_url: HttpUrl
+    source_type: Literal["github", "zip", "local_git"]
+    source_value: str = Field(..., min_length=1, max_length=500)
 
 
 class ProjectRegisterResponse(BaseModel):
