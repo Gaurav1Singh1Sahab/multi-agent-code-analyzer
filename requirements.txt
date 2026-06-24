@@ -3,10 +3,13 @@ annotated-types==0.7.0
 anyio==4.14.0
 appnope==0.1.4
 asttokens==3.0.1
+bcrypt==4.0.1
 click==8.4.1
 comm==0.2.3
 debugpy==1.8.21
 decorator==5.3.1
+dnspython==2.8.0
+email-validator==2.3.0
 executing==2.2.1
 fastapi==0.138.0
 h11==0.16.0
@@ -21,6 +24,7 @@ matplotlib-inline==0.2.2
 nest-asyncio2==1.7.2
 packaging==26.2
 parso==0.8.7
+passlib==1.7.4
 pexpect==4.9.0
 platformdirs==4.10.0
 prompt_toolkit==3.0.52
