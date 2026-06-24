@@ -2,6 +2,8 @@ from fastapi import FastAPI
 
 from backend.routes.auth import router as auth_router
 
+from backend.routes.project import router as project_router
+
 app = FastAPI(
     title="Multi-Agent Code Analyzer",
     version="1.0.0"
@@ -9,6 +11,7 @@ app = FastAPI(
 
 
 app.include_router(auth_router)
+app.include_router(project_router)
 
 
 @app.get("/")
