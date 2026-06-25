@@ -9,12 +9,27 @@ from backend.models.user import User
 from backend.schemas.project_schema import ProjectRegisterRequest
 from backend.utils.project_id_generator import generate_project_id
 
+import zipfile
+
 from git import Repo
 
 
 UPLOAD_DIR = "uploads/zip_repos"
 
 WORKSPACE_ROOT = "project_workspaces"
+
+IGNORED_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    ".idea",
+    ".pytest_cache",
+    ".mypy_cache"
+}
 
 
 def validate_source(project_data: ProjectRegisterRequest) -> None:
@@ -129,9 +144,18 @@ def start_project_analysis(
 
     workspace_path = prepare_project_workspace(project)
 
-    # Step 2 addition: clone GitHub repo into workspace/source
     if project.source_type == "github":
         clone_github_repo(project.source_value, workspace_path)
+
+    elif project.source_type == "zip":
+        extract_zip_to_workspace(project.source_value, workspace_path)
+
+    elif project.source_type == "local_git":
+        copy_local_repo_to_workspace(project.source_value, workspace_path)
+
+    # NEW: scan ingested source files and save inventory
+    file_inventory = scan_project_files(workspace_path)
+    save_file_inventory(workspace_path, file_inventory)
 
     return project, workspace_path
 
@@ -186,3 +210,129 @@ def clone_github_repo(repo_url: str, workspace_path: str) -> None:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clone GitHub repository: {str(e)}"
         )
+    
+
+
+def extract_zip_to_workspace(zip_path: str, workspace_path: str) -> None:
+    source_dir = os.path.join(workspace_path, "source")
+
+    if not os.path.exists(zip_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ZIP file not found at path: {zip_path}"
+        )
+
+    if not zip_path.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provided source file is not a ZIP file"
+        )
+
+    # Prevent extraction into a non-empty source dir
+    if os.path.exists(source_dir) and os.listdir(source_dir):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source directory is not empty, cannot extract ZIP"
+        )
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(source_dir)
+    except zipfile.BadZipFile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not a valid ZIP archive"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract ZIP file: {str(e)}"
+        )
+    
+
+def copy_local_repo_to_workspace(local_repo_path: str, workspace_path: str) -> None:
+    source_dir = os.path.join(workspace_path, "source")
+
+    if not os.path.exists(local_repo_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Local repository path not found: {local_repo_path}"
+        )
+
+    if not os.path.isdir(local_repo_path):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provided local repository path is not a directory"
+        )
+
+    # Prevent copying into a non-empty source dir
+    if os.path.exists(source_dir) and os.listdir(source_dir):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source directory is not empty, cannot copy local repository"
+        )
+
+    try:
+        # Copy the CONTENTS of local repo into source_dir
+        for item in os.listdir(local_repo_path):
+            src_item = os.path.join(local_repo_path, item)
+            dst_item = os.path.join(source_dir, item)
+
+            if os.path.isdir(src_item):
+                shutil.copytree(src_item, dst_item)
+            else:
+                shutil.copy2(src_item, dst_item)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to copy local repository: {str(e)}"
+        )
+    
+
+def scan_project_files(workspace_path: str) -> list[dict]:
+    source_dir = os.path.join(workspace_path, "source")
+
+    if not os.path.exists(source_dir):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Source directory not found for workspace: {workspace_path}"
+        )
+
+    file_inventory = []
+
+    for root, dirs, files in os.walk(source_dir):
+        # Remove ignored directories from traversal
+        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS]
+
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+
+            try:
+                relative_path = os.path.relpath(file_path, source_dir)
+                extension = os.path.splitext(file_name)[1]
+                size_bytes = os.path.getsize(file_path)
+
+                file_inventory.append({
+                    "relative_path": relative_path,
+                    "file_name": file_name,
+                    "extension": extension,
+                    "absolute_path": file_path,
+                    "size_bytes": size_bytes
+                })
+            except Exception:
+                # Skip problematic files rather than breaking the whole scan
+                continue
+
+    return file_inventory
+
+def save_file_inventory(workspace_path: str, file_inventory: list[dict]) -> str:
+    artifacts_dir = os.path.join(workspace_path, "artifacts")
+    os.makedirs(artifacts_dir, exist_ok=True)
+
+    inventory_path = os.path.join(artifacts_dir, "file_inventory.json")
+
+    with open(inventory_path, "w", encoding="utf-8") as f:
+        json.dump(file_inventory, f, indent=4)
+
+    return inventory_path
