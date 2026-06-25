@@ -9,6 +9,8 @@ from backend.models.user import User
 from backend.schemas.project_schema import ProjectRegisterRequest
 from backend.utils.project_id_generator import generate_project_id
 
+from git import Repo
+
 
 UPLOAD_DIR = "uploads/zip_repos"
 
@@ -96,9 +98,6 @@ def register_project(
 
 
 
-# ... keep your existing imports and functions above ...
-
-
 def start_project_analysis(
     db: Session,
     user: User,
@@ -129,6 +128,10 @@ def start_project_analysis(
     db.refresh(project)
 
     workspace_path = prepare_project_workspace(project)
+
+    # Step 2 addition: clone GitHub repo into workspace/source
+    if project.source_type == "github":
+        clone_github_repo(project.source_value, workspace_path)
 
     return project, workspace_path
 
@@ -164,3 +167,22 @@ def prepare_project_workspace(project: Project) -> str:
         json.dump(metadata, f, indent=4)
 
     return project_workspace
+
+
+def clone_github_repo(repo_url: str, workspace_path: str) -> None:
+    source_dir = os.path.join(workspace_path, "source")
+
+    # Prevent cloning into a non-empty source dir
+    if os.path.exists(source_dir) and os.listdir(source_dir):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source directory is not empty, cannot clone repository"
+        )
+
+    try:
+        Repo.clone_from(repo_url, source_dir)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clone GitHub repository: {str(e)}"
+        )
