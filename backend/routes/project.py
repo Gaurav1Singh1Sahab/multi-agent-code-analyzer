@@ -1,16 +1,28 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, UploadFile, File
 
 from backend.models.user import User
 from backend.schemas.project_schema import (
     ProjectRegisterRequest,
-    ProjectRegisterResponse
+    ProjectRegisterResponse,
+    ZipUploadResponse
 )
-from backend.services.project_service import register_project
+from backend.services.project_service import register_project, upload_zip_file
 from backend.database import get_db
 from sqlalchemy.orm import Session
 from backend.utils.auth_dependency import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
+
+@router.post(
+    "/upload-zip",
+    response_model=ZipUploadResponse,
+    status_code=status.HTTP_201_CREATED
+)
+def upload_zip(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    return upload_zip_file(file)
 
 
 @router.post(

@@ -15,3 +15,9 @@ class ProjectRegisterResponse(BaseModel):
     source_value: str
     status: str
     message: str
+
+
+class ZipUploadResponse(BaseModel):
+    filename: str
+    stored_path: str
+    message: str
