@@ -1,5 +1,4 @@
 import os, shutil
-
 from datetime import datetime
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -92,3 +91,39 @@ def register_project(
     db.refresh(new_project)
 
     return new_project
+
+
+
+# ... keep your existing imports and functions above ...
+
+
+def start_project_analysis(
+    db: Session,
+    user: User,
+    project_id: str
+) -> Project:
+    project = (
+        db.query(Project)
+        .filter(Project.project_id == project_id, Project.user_id == user.id)
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found for this user"
+        )
+
+    if project.status == "ANALYSIS_STARTED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Analysis already started for this project"
+        )
+
+    project.status = "ANALYSIS_STARTED"
+    project.analysis_started_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(project)
+
+    return project

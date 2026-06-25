@@ -21,3 +21,11 @@ class ZipUploadResponse(BaseModel):
     filename: str
     stored_path: str
     message: str
+
+class StartAnalysisResponse(BaseModel):
+    project_id: str
+    persona: str
+    source_type: str
+    source_value: str
+    status: str
+    message: str
