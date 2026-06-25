@@ -1,4 +1,4 @@
-import os, shutil
+import os, shutil, json
 from datetime import datetime
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -11,6 +11,8 @@ from backend.utils.project_id_generator import generate_project_id
 
 
 UPLOAD_DIR = "uploads/zip_repos"
+
+WORKSPACE_ROOT = "project_workspaces"
 
 
 def validate_source(project_data: ProjectRegisterRequest) -> None:
@@ -101,7 +103,7 @@ def start_project_analysis(
     db: Session,
     user: User,
     project_id: str
-) -> Project:
+) -> tuple[Project, str]:
     project = (
         db.query(Project)
         .filter(Project.project_id == project_id, Project.user_id == user.id)
@@ -126,4 +128,39 @@ def start_project_analysis(
     db.commit()
     db.refresh(project)
 
-    return project
+    workspace_path = prepare_project_workspace(project)
+
+    return project, workspace_path
+
+
+
+
+def prepare_project_workspace(project: Project) -> str:
+    os.makedirs(WORKSPACE_ROOT, exist_ok=True)
+
+    project_workspace = os.path.join(WORKSPACE_ROOT, project.project_id)
+    source_dir = os.path.join(project_workspace, "source")
+    artifacts_dir = os.path.join(project_workspace, "artifacts")
+    logs_dir = os.path.join(project_workspace, "logs")
+
+    os.makedirs(project_workspace, exist_ok=True)
+    os.makedirs(source_dir, exist_ok=True)
+    os.makedirs(artifacts_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
+
+    metadata = {
+        "project_id": project.project_id,
+        "user_id": project.user_id,
+        "persona": project.persona,
+        "source_type": project.source_type,
+        "source_value": project.source_value,
+        "status": "ANALYSIS_STARTED",
+        "created_at": str(project.created_at) if project.created_at else None,
+        "analysis_started_at": str(project.analysis_started_at) if project.analysis_started_at else None
+    }
+
+    metadata_file = os.path.join(project_workspace, "metadata.json")
+    with open(metadata_file, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=4)
+
+    return project_workspace

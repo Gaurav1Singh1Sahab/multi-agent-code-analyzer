@@ -28,4 +28,5 @@ class StartAnalysisResponse(BaseModel):
     source_type: str
     source_value: str
     status: str
+    workspace_path: str
     message: str

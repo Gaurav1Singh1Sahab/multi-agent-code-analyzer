@@ -107,12 +107,14 @@ def create_project(
     response_model=StartAnalysisResponse,
     status_code=status.HTTP_200_OK
 )
+
+
 def start_analysis(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    project = start_project_analysis(db, current_user, project_id)
+    current_user: User = Depends(get_current_user)):
+    
+    project, workspace_path = start_project_analysis(db, current_user, project_id)
 
     return StartAnalysisResponse(
         project_id=project.project_id,
@@ -120,5 +122,6 @@ def start_analysis(
         source_type=project.source_type,
         source_value=project.source_value,
         status=project.status,
+        workspace_path=workspace_path,
         message=f"Analysis started successfully for project {project.project_id}"
     )
